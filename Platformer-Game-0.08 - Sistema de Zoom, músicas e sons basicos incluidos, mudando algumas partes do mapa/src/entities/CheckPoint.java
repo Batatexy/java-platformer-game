@@ -1,0 +1,184 @@
+package entities;
+
+import java.awt.Color;
+import java.awt.Graphics;
+import java.awt.geom.Rectangle2D;
+import java.awt.image.BufferedImage;
+
+import audio.AudioPlayer;
+import gamestates.Playing;
+import main.Game;
+import utilz.LoadSave;
+
+public class CheckPoint extends Entity 
+{
+	private Player player;
+	
+	//Matriz de localizacao dos sprites
+	private BufferedImage[][] animations;
+	
+	//velocidade de animacao e qual sprite sera exibido na tela
+	private int animationTick, animationIndex, animationSpeed = 30;
+	private int checkpointAction = 0;
+	
+	private int[][] levelData;
+	
+	//Configurações do quanto o sprite se desloca da Hitbox
+	private float xDrawOffset = 20 * Game.SCALE;
+	private float yDrawOffset = 18 * Game.SCALE;
+	
+	private int restartValue = 100, restartTimer = restartValue;
+	private float saveX, saveY;
+	private boolean restartTrigger=true;
+	public static boolean resetCheckpoint=false;
+	private int xs;
+
+	public CheckPoint(float x, float y, Player player) 
+	{
+		super((int)(x * (Game.SCALE)), (int)((y) * (Game.SCALE)), (int)(64 * (Game.SCALE)), (int)(64 * (Game.SCALE)));
+		loadAnimations();
+		//Tamanho da hitbox do Checkpoint
+		initHitbox((x+4)  * Game.SCALE, (y-30)  * Game.SCALE,(int) (7 * Game.SCALE), (int) (47 * Game.SCALE));
+		
+		this.player = player;
+		
+		saveX=(int)((x-9) * (Game.SCALE));
+		saveY=(int)((y+4) * (Game.SCALE));
+		
+		xs=(int) x/Game.TILES_SIZE;
+	}
+	
+	private void loadAnimations() 
+	{
+		BufferedImage image = LoadSave.GetSpriteAtlas("/CheckPointFlag.png");
+		
+		//Matriz dos sprites
+		animations = new BufferedImage[3][19];
+		for (int j = 0; j < animations.length; j++)
+			for (int i = 0; i < animations[j].length; i++)
+				animations[j][i] = image.getSubimage(i * 64, j * 64, 64, 64);
+	}
+	
+	private void updateAnimationTick() 
+	{
+		animationTick++;
+		if (animationTick >= animationSpeed) 
+		{
+			animationTick = 0;
+			animationIndex++;
+			
+			if (checkpointAction == 0)
+			{
+				animationIndex = 0;
+			}
+			else if (checkpointAction == 1)
+			{
+				if (animationIndex >= 19) 
+				{
+					animationIndex = 0;
+					checkpointAction=2;
+					resetAnimationTick();
+				}
+			}
+			else if (checkpointAction == 2)
+			{
+				if (animationIndex >= 6) 
+				{
+					animationIndex = 0;
+					resetAnimationTick();
+				}
+			}
+		}
+	}
+	
+	private void setAnimation() 
+	{
+		int startAnimation = checkpointAction;
+		
+		if (checkpointAction == 0)
+			animationSpeed=0;
+		else if (checkpointAction == 1)
+			animationSpeed=5;
+		else if (checkpointAction == 2)
+			animationSpeed=10;
+	}
+	
+	private void resetAnimationTick() 
+	{
+		animationTick = 0;
+		animationIndex = 0;
+	}
+	
+	public void update() 
+	{
+		if(!Playing.paused)
+		{
+			updateAnimationTick();
+			setAnimation();
+			
+			if (resetCheckpoint)
+				checkpointAction=0;
+		}
+	}
+	
+	public void draw(Graphics g, int xLevelOffset, int yLevelOffset, Player player)
+	{
+		this.player = player;
+		
+		drawHitbox(g, Color.YELLOW, xLevelOffset, yLevelOffset);
+		
+		int rangeX = xLevelOffset/Game.TILES_SIZE;
+		int rangeY = yLevelOffset/Game.TILES_SIZE;
+		
+		int xw = 64/Game.TILES_SIZE;
+		int yw = 64/Game.TILES_SIZE;
+		
+		//Sistema de carregar apenas o que está dentro da tela
+		//Mude debug para 1 ou maior para visualizar em jogo
+		if (((xs+xw) > ((rangeX - 3 + Playing.debugPropsDraw)/Game.SCALE))         
+			  && ((xs) < ((rangeX + 20 - Playing.debugPropsDraw)/Game.SCALE)))
+			g.drawImage(animations[checkpointAction][animationIndex],
+				(int) ((hitbox.x - xDrawOffset) - Playing.xLevelOffset),
+				(int) (hitbox.y - yDrawOffset) - Playing.yLevelOffset,
+				width, height, null);
+		
+		checkCheckPointTouched(player.getHitbox());	
+	}
+	
+	public void checkCheckPointTouched(Rectangle2D.Float hitbox)
+	{
+		if (this.hitbox.intersects(hitbox))
+		{
+			if (restartTrigger)
+			{
+				AudioPlayer.playEffect(AudioPlayer.CHECKPOINT);
+				
+				Player.lastX=(int) saveX;
+				Player.lastY=(int) saveY;
+				
+				checkpointAction=1;
+				resetAnimationTick();
+				restartTrigger=false;
+				resetCheckpoint=false;
+			}
+		}
+		
+		if (resetCheckpoint)
+			restartTrigger=true;
+	}
+	
+	public float getX()
+	{
+		return x;
+	}
+	
+	public float getY()
+	{
+		return y;
+	}
+	
+	public static void restartAllCheckpoints() 
+	{
+		resetCheckpoint=true;
+	}
+}
